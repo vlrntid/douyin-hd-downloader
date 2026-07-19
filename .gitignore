@@ -12,7 +12,7 @@ venv/
 # ---- Build artifacts (PyInstaller) ----
 dist/
 build/
-python313.dll
+python3*.dll
 # keep DouyinHD.spec (needed to rebuild) — not ignored
 
 # ---- Secrets / app data (NEVER commit) ----
