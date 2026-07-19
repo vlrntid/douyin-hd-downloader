@@ -15,6 +15,9 @@ build/
 python3*.dll
 # keep DouyinHD.spec (needed to rebuild) — not ignored
 
+# ---- Release artifacts (uploaded to GitHub, never committed) ----
+DouyinHD-*-win64.zip
+
 # ---- Secrets / app data (NEVER commit) ----
 cookies.txt
 *.cookies
