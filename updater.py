@@ -404,22 +404,29 @@ def check_ytdlp(auto_install: bool = True, on_status: StatusCb = None) -> dict:
 # --------------------------------------------------------------------------- #
 
 def get_latest_app_release(repo: str) -> Optional[dict]:
-    """Return ``{tag, exe_url}`` for the repo's latest release, or None."""
+    """Return ``{tag, exe_url, zip_url}`` for the repo's latest release, or None.
+
+    ``exe_url`` is a bare ``.exe`` (single-file replace); ``zip_url`` is a folder
+    bundle (our distribution). Either can drive an in-place update.
+    """
     if not repo or "/" not in repo:
         return None
     data = _http_json(GITHUB_LATEST_RELEASE.format(repo=repo))
     if not data:
         return None
     tag = data.get("tag_name")
-    exe_url = None
-    for asset in data.get("assets", []):
-        name = (asset.get("name") or "").lower()
-        if name.endswith(".exe"):
-            exe_url = asset.get("browser_download_url")
-            break
     if not tag:
         return None
-    return {"tag": tag, "exe_url": exe_url}
+    exe_url = None
+    zip_url = None
+    for asset in data.get("assets", []):
+        name = (asset.get("name") or "").lower()
+        url = asset.get("browser_download_url")
+        if name.endswith(".exe") and exe_url is None:
+            exe_url = url
+        elif name.endswith(".zip") and zip_url is None:
+            zip_url = url
+    return {"tag": tag, "exe_url": exe_url, "zip_url": zip_url}
 
 
 def check_app_update(repo: str, current: str = APP_VERSION,
@@ -437,24 +444,37 @@ def check_app_update(repo: str, current: str = APP_VERSION,
     return None
 
 
-def apply_app_update(exe_url: str, on_status: StatusCb = None) -> Optional[str]:
-    """Download a new exe and stage an in-place replace + relaunch (Windows).
+def apply_app_update(exe_url: str = None, zip_url: str = None,
+                     on_status: StatusCb = None) -> Optional[str]:
+    """Download a newer app package and stage an in-place replace + relaunch.
+
+    Handles two package shapes from the GitHub release:
+      * a bare ``.exe`` — single-file replace of the running exe; or
+      * a ``.zip`` folder bundle (our distribution) — extracted over the install
+        dir after the app exits.
 
     Returns the path of the helper script the caller should run on exit, or
     None on failure / unsupported platform.
     """
-    if not exe_url or sys.platform != "win32" or not getattr(sys, "frozen", False):
-        _report(on_status,
-                "Auto app-update only works for the built Windows exe.")
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        _report(on_status, "Auto app-update only works for the built Windows exe.")
         return None
+    if exe_url:
+        return _stage_exe_update(exe_url, on_status)
+    if zip_url:
+        return _stage_zip_update(zip_url, on_status)
+    _report(on_status, "No app-update package found in the release.")
+    return None
 
+
+def _stage_exe_update(exe_url: str, on_status: StatusCb) -> Optional[str]:
+    """Stage a single-file exe replace (legacy / external builds)."""
     current_exe = sys.executable
     staging = os.path.join(user_data_dir(), "update_staging.exe")
     _report(on_status, "Downloading app update…")
     if not _http_download(exe_url, staging):
         _report(on_status, "App update download failed.")
         return None
-
     bat_path = os.path.join(user_data_dir(), "apply_update.bat")
     try:
         with open(bat_path, "w", encoding="utf-8") as fh:
@@ -470,6 +490,75 @@ def apply_app_update(exe_url: str, on_status: StatusCb = None) -> Optional[str]:
         return None
     _report(on_status, "App update ready — restart to apply.")
     return bat_path
+
+
+def _stage_zip_update(zip_url: str, on_status: StatusCb) -> Optional[str]:
+    """Stage a folder-bundle update.
+
+    Downloads the zip, extracts it, and writes a bat that copies the extracted
+    app over the install dir *after the app exits* (avoids file locks on the
+    running exe / ``_internal``). Chromium (``ms-playwright``) is excluded from
+    the copy — it is large and rarely changes between app releases, so updates
+    stay small and never touch locked browser files.
+    """
+    install_dir = app_install_dir()
+    staging = os.path.join(user_data_dir(), "update_staging.zip")
+    _report(on_status, "Downloading app update…")
+    if not _http_download(zip_url, staging):
+        _report(on_status, "App update download failed.")
+        return None
+
+    extract_root = tempfile.mkdtemp(prefix="douyinhd_update_")
+    try:
+        with zipfile.ZipFile(staging, "r") as zf:
+            zf.extractall(extract_root)
+    except Exception as exc:  # noqa: BLE001
+        _report(on_status, f"Could not extract update: {exc}")
+        return None
+
+    source_dir = _resolve_update_source(extract_root, os.path.basename(install_dir))
+    if not source_dir or not os.path.isdir(source_dir):
+        _report(on_status, "Update package layout unrecognized.")
+        return None
+
+    shutil.rmtree(os.path.join(source_dir, "ms-playwright"), ignore_errors=True)
+
+    bat_path = os.path.join(user_data_dir(), "apply_update.bat")
+    try:
+        with open(bat_path, "w", encoding="utf-8") as fh:
+            fh.write(
+                "@echo off\r\n"
+                f'del /q "{staging}" >nul 2>&1\r\n'
+                "timeout /t 2 /nobreak >nul\r\n"
+                f'xcopy /E /I /Y /Q "{source_dir}\\*" "{install_dir}\\" >nul\r\n'
+                f'rmdir /s /q "{extract_root}" >nul 2>&1\r\n'
+                f'start "" "{os.path.join(install_dir, "DouyinHD.exe")}"\r\n'
+                'del "%~f0"\r\n'
+            )
+    except OSError as exc:
+        _report(on_status, f"Could not stage update: {exc}")
+        return None
+    _report(on_status, "App update ready — restart to apply.")
+    return bat_path
+
+
+def _resolve_update_source(extract_root: str, install_name: str) -> Optional[str]:
+    """Locate the extracted app folder to copy over the install dir.
+
+    Prefers a top-level folder matching the install dir name (e.g. ``DouyinHD``);
+    falls back to the zip's sole top-level directory, then to the root itself.
+    """
+    try:
+        entries = os.listdir(extract_root)
+    except OSError:
+        return None
+    if install_name in entries:
+        return os.path.join(extract_root, install_name)
+    dirs = [e for e in entries
+            if os.path.isdir(os.path.join(extract_root, e))]
+    if len(dirs) == 1:
+        return os.path.join(extract_root, dirs[0])
+    return extract_root
 
 
 # --------------------------------------------------------------------------- #

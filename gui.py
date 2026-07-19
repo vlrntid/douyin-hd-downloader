@@ -135,8 +135,20 @@ class DouyinDownloaderApp(ctk.CTk):
         self._refresh_cookie_label()
         # Apply the persisted no-login default to the cookie UI state.
         self.on_nologin_change()
+        # Run any staged app-update script on exit, then close.
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
         # Kick off a background update / self-repair check.
         self._start_update_check()
+
+    def _on_closing(self) -> None:
+        """Close handler: launch a staged update (if any) before exiting."""
+        script = getattr(self, "_pending_update_script", None)
+        if script and os.path.isfile(script):
+            try:
+                os.startfile(script)  # type: ignore[attr-defined]
+            except OSError:
+                pass
+        self.destroy()
 
     # ------------------------------------------------------------------ #
     # Layout
@@ -591,7 +603,7 @@ class DouyinDownloaderApp(ctk.CTk):
                     repo, APP_VERSION,
                     on_status=lambda m: self._set_status_async(m, IDLE_COLOR),
                 )
-                if release and release.get("exe_url"):
+                if release and (release.get("exe_url") or release.get("zip_url")):
                     self._pending_app_update = release
                     self._set_status_async(
                         f"App update {release['tag']} available — see Settings "
@@ -616,18 +628,19 @@ class DouyinDownloaderApp(ctk.CTk):
 
     def install_app_update(self) -> None:
         release = getattr(self, "_pending_app_update", None)
-        if not release or not release.get("exe_url"):
+        if not release or not (release.get("exe_url") or release.get("zip_url")):
             self._set_status("No app update is pending.", IDLE_COLOR)
             return
         self._set_status("Downloading app update…", IDLE_COLOR)
         threading.Thread(
             target=self._run_install_app_update,
-            args=(release["exe_url"],), daemon=True,
+            args=(release.get("exe_url"), release.get("zip_url")), daemon=True,
         ).start()
 
-    def _run_install_app_update(self, exe_url: str) -> None:
+    def _run_install_app_update(self, exe_url: str, zip_url: str = None) -> None:
         script = apply_app_update(
-            exe_url, on_status=lambda m: self._set_status_async(m, IDLE_COLOR))
+            exe_url, zip_url=zip_url,
+            on_status=lambda m: self._set_status_async(m, IDLE_COLOR))
         if script:
             self._pending_update_script = script
             self._set_status_async(

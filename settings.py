@@ -19,9 +19,11 @@ SETTINGS_FILENAME = "settings.json"
 DEFAULTS: Dict[str, Any] = {
     # Auto-check and update the yt-dlp engine on startup.
     "auto_update_ytdlp": True,
-    # GitHub "owner/repo" for app self-updates. Blank = dormant (no app-update
-    # checks; yt-dlp updates + self-repair still run).
-    "update_repo": "",
+    # GitHub "owner/repo" for app self-updates. Pre-set to the project repo so
+    # the app checks for newer releases on launch; "Install App Update" appears
+    # when one is found. Set blank to disable app-update checks (yt-dlp updates
+    # + self-repair still run).
+    "update_repo": "vlrntid/douyin-hd-downloader",
     # Browser used for the "Import Cookies" login flow.
     "preferred_browser": "Chrome",
     # Where downloads are saved (blank = use the default downloads dir).

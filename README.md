@@ -44,9 +44,11 @@ You should **never have to come back to fix things manually**:
   Playwright browser are detected from the bundled folders or PATH.
 - **Auto-repair toggle** — *Settings → Updates & Repair → "Auto-update yt-dlp
   on startup"* (on by default).
-- **App self-update (optional)** — set *Settings → App update source* to a
-  GitHub `owner/repo`. When a newer release is published, the app shows an
-  **Install App Update** button. Leave it blank to disable app-update checks.
+- **App self-update** — pre-configured to check
+  [`vlrntid/douyin-hd-downloader`](https://github.com/vlrntid/douyin-hd-downloader)
+  on launch. When a newer release is published, the app shows an
+  **Install App Update** button that downloads and applies it. Change or blank
+  *Settings → App update source* to use a different repo or disable the check.
 - **Logs** — everything (update checks, repairs, downloads) is written to
   `%LOCALAPPDATA%/DouyinHD/logs/download.log` (auto-rotated).
 

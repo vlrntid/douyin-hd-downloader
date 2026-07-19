@@ -157,6 +157,25 @@ class TestAppUpdateCheck(unittest.TestCase):
         finally:
             updater.get_latest_app_release = orig  # type: ignore[assignment]
 
+    def test_check_app_update_detects_zip_only_release(self):
+        release = {"tag": "2.0.0", "exe_url": None, "zip_url": "http://x/app.zip"}
+
+        def fake_get_latest(repo):
+            return release
+
+        orig = updater.get_latest_app_release
+        updater.get_latest_app_release = fake_get_latest  # type: ignore[assignment]
+        try:
+            result = updater.check_app_update("owner/repo", "1.0.0")
+            self.assertEqual(result, release)
+        finally:
+            updater.get_latest_app_release = orig  # type: ignore[assignment]
+
+    def test_apply_app_update_dormant_in_dev(self):
+        # In a dev (non-frozen) interpreter, no update is staged.
+        self.assertIsNone(updater.apply_app_update(exe_url="http://x/app.exe"))
+        self.assertIsNone(updater.apply_app_update(zip_url="http://x/app.zip"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
