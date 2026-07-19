@@ -1,0 +1,34 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Virtual environments ----
+venv/
+.venv/
+
+# ---- Build artifacts (PyInstaller) ----
+dist/
+build/
+python313.dll
+# keep DouyinHD.spec (needed to rebuild) — not ignored
+
+# ---- Secrets / app data (NEVER commit) ----
+cookies.txt
+*.cookies
+*.cookie
+cookies.json
+config.yml
+settings.json
+
+# ---- User downloads / logs ----
+downloads/
+logs/
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
