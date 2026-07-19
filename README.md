@@ -1,8 +1,7 @@
 # Douyin HD Downloader
 
 A small desktop app for grabbing Douyin **and YouTube** videos at the highest
-available quality and saving them as merged MP4 files — built for a YouTube
-Shorts editing workflow.
+available quality and saving them as merged MP4 files
 
 - **Backend:** [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - **Muxing:** ffmpeg (best video + best audio → single MP4)
